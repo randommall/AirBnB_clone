@@ -16,20 +16,14 @@ from models.state import State
 from models.city import City
 
 
-
-def split_curly_braces(incoming_xtra_arg):
+def split_curly_braces(e_arg):
     """
     Splits the curly braces for the update method
-
-    incoming_xtra_arg = '"87f12", "first_name", "John"'
-
-    incoming_xtra_arg = '"87f12", {'first_name': "John", "age": 89}'
     """
-    curly_braces = re.search(r"\{(.*?)\}", incoming_xtra_arg)
+    curly_braces = re.search(r"\{(.*?)\}", e_arg)
 
     if curly_braces:
-        id_with_comma = shlex.split(incoming_xtra_arg[:curly_braces.span()[0]])
-        # "87f12",
+        id_with_comma = shlex.split(e_arg[:curly_braces.span()[0]])
         id = [i.strip(",") for i in id_with_comma][0]
 
         str_data = curly_braces.group(1)
@@ -39,19 +33,23 @@ def split_curly_braces(incoming_xtra_arg):
             print("**  invalid dictionary format **")
             return
         return id, arg_dict
-    # expected return ("87f12", {'first_name': "John", "age": 89})
     else:
-        # expecting '"87f12", "first_name", "John"'
-        commands = incoming_xtra_arg.split(",")
-        try:
-            id = commands[0]
-            attr_name = commands[1]
-            attr_value = commands[2]
+        commands = e_arg.split(",")
+        if commands:
+            try:
+                id = commands[0]
+            except Exception:
+                return "", ""
+            try:
+                attr_name = commands[1]
+            except Exception:
+                return id, ""
+            try:
+                attr_value = commands[2]
+            except Exception:
+                return id, attr_name
             return f"{id}", f"{attr_name} {attr_value}"
-            # expected return ("87f12", "first_name" "John")
-        # modified from print("** argument missing **") to pass
-        except Exception:
-            pass
+
 
 class HBNBCommand(cmd.Cmd):
     """
@@ -78,7 +76,6 @@ class HBNBCommand(cmd.Cmd):
         Quit command to exit the program.
         """
         return True
-        
 
     def do_create(self, arg):
         """
@@ -95,8 +92,6 @@ class HBNBCommand(cmd.Cmd):
             new_instance = eval(f"{commands[0]}()")
             storage.save()
             print(new_instance.id)
-
-    
 
     def do_show(self, arg):
         """
@@ -161,7 +156,7 @@ class HBNBCommand(cmd.Cmd):
             for key, value in objects.items():
                 if key.split('.')[0] == commands[0]:
                     print(str(value))
-        
+
     def do_count(self, arg):
         """
         Counts and retrieves the number of instances of a class
@@ -172,15 +167,14 @@ class HBNBCommand(cmd.Cmd):
         commands = shlex.split(arg)
 
         if arg:
-            incoming_class_name = commands[0]
-
+            cls_nm = commands[0]
 
         count = 0
 
         if commands:
-            if incoming_class_name in self.valid_classes:
+            if cls_nm in self.valid_classes:
                 for obj in objects.values():
-                    if obj.__class__.__name__ == incoming_class_name:
+                    if obj.__class__.__name__ == cls_nm:
                         count += 1
                 print(count)
             else:
@@ -216,7 +210,6 @@ class HBNBCommand(cmd.Cmd):
                 curly_braces = re.search(r"\{(.*?)\}", arg)
 
                 if curly_braces:
-                    # added to catch errors
                     try:
                         str_data = curly_braces.group(1)
 
@@ -224,7 +217,6 @@ class HBNBCommand(cmd.Cmd):
 
                         attribute_names = list(arg_dict.keys())
                         attribute_values = list(arg_dict.values())
-                        # added to catch exception
                         try:
                             attr_name1 = attribute_names[0]
                             attr_value1 = attribute_values[0]
@@ -232,7 +224,6 @@ class HBNBCommand(cmd.Cmd):
                         except Exception:
                             pass
                         try:
-                            # added to catch exception
                             attr_name2 = attribute_names[1]
                             attr_value2 = attribute_values[1]
                             setattr(obj, attr_name2, attr_value2)
@@ -252,25 +243,20 @@ class HBNBCommand(cmd.Cmd):
                     setattr(obj, attr_name, attr_value)
 
                 obj.save()
-    
+
     def default(self, arg):
         """
         Default behavior for cmd module when input is invalid
-            usage:
-                <class_name>.<method><("id", {"attr_name": "attr_value", "attr_name": "attr_value")>
-
         """
         arg_list = arg.split('.')
 
-        incoming_class_name = arg_list[0]
+        cls_nm = arg_list[0]  # incoming class name
 
         command = arg_list[1].split('(')
 
-        incoming_method = command[0]
-        
-        incoming_xtra_arg = command[1].split(')')[0]
-        
-        
+        cmd_met = command[0]  # incoming command method
+
+        e_arg = command[1].split(')')[0]  # extra arguments
 
         method_dict = {
                 'all': self.do_all,
@@ -279,34 +265,27 @@ class HBNBCommand(cmd.Cmd):
                 'update': self.do_update,
                 'count': self.do_count
                 }
-        if incoming_method in method_dict.keys():
-            if incoming_method != "update":
-                return method_dict[incoming_method]("{} {}".format(incoming_class_name,
-                                                                   incoming_xtra_arg))
+
+        if cmd_met in method_dict.keys():
+            if cmd_met != "update":
+                return method_dict[cmd_met]("{} {}".format(cls_nm, e_arg))
             else:
+                if not cls_nm:
+                    print("** class name missing **")
+                    return
                 try:
-                    obj_id, arg_dict = split_curly_braces(incoming_xtra_arg)
-                # modified from print("** no instance found **") to pass
+                    obj_id, arg_dict = split_curly_braces(e_arg)
                 except Exception:
                     pass
                 try:
-                    if isinstance(arg_dict, str):
-                        attributes = arg_dict
-                        return method_dict[incoming_method]("{} {} {}".format(incoming_class_name,
-                                                                                 obj_id,
-                                                                                 attributes))
-                    elif isinstance(arg_dict, dict):
-                        dict_attributes = arg_dict
-                        return method_dict[incoming_method]("{} {} {}".format(incoming_class_name,
-                                                                           obj_id,
-                                                                           dict_attributes))
-                # modified from print("** argument missing **") to pass
+                    call = method_dict[cmd_met]
+                    return call("{} {} {}".format(cls_nm, obj_id, arg_dict))
                 except Exception:
                     pass
         else:
             print("*** Unknown syntax: {}".format(arg))
             return False
-    
+
 
 if __name__ == '__main__':
     HBNBCommand().cmdloop()
